@@ -1,24 +1,32 @@
 const fs = require('fs');
-const fetch = require('node-fetch');
+const https = require('https');
 
-let users = [];
 
-async function getAllUsers() {
+
+function getAllUsers() {
+    let users = [];
     let requestURI = 'https://reqres.in/api/users/';
     for (let i = 1; i < 11; i++) {
-        const fetchedData = await fetch(requestURI + i);
-        const data = await fetchedData.json();
-        users.push({
-            'id': Math.random().toString(36).substr(2),
-            'name': `${data.data.first_name} ${data.data.last_name}`,
-            'avatar': `./images/${data.data.first_name}_${data.data.last_name}.jpg`,
-        });
-        fetch(data.data.avatar)
-            .then(res => {
-                let img = fs.createWriteStream(`db/images/${data.data.first_name}_${data.data.last_name}.jpg`);
-                res.body.pipe(img);
+        https.get(requestURI + i, res => {
+            res.on('data', data => {
+                let user = JSON.parse(data).data;
+                users.push({
+                    'id': Math.random().toString(36).substr(2),
+                    'name': `${user.first_name} ${user.last_name}`,
+                    'avatar': `./images/${user.first_name}_${user.last_name}.jpg`,
+                });
+                https.get(user.avatar, res => {
+                    let img = fs.createWriteStream(`db/images/${user.first_name}_${user.last_name}.jpg`);
+                    res.pipe(img);
+                });
+            });
+            res.on('end', () => {
+                if (users.length === 10)
+                    fs.writeFileSync('db/data.json', JSON.stringify(users));
             })
-
+        }).on('error', err => {
+            console.log(`Error ${err}`);
+        });
     }
 };
 
@@ -28,11 +36,10 @@ function mkdir(dir) {
     }
 }
 
-async function app() {
+function app() {
     mkdir(__dirname + '/db');
     mkdir(__dirname + '/db/images');
-    await getAllUsers();
-    fs.writeFileSync('db/data.json', JSON.stringify(users));
+    getAllUsers();
 }
 
 app();
